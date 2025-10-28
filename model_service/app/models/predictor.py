@@ -53,7 +53,6 @@ def run_prediction_and_xai(model, image_bytes: bytes, metadata: dict, class_mapp
     if not isinstance(heatmap_base64, str):
         heatmap_base64 = ""
 
-    # 6. Tạo response
     response = PredictResponse(
         temp_id=metadata.get("temp_id", "unknown"), 
         input_metadata=metadata,
