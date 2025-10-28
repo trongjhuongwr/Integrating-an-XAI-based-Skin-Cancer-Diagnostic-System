@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 import json
 import torch
+import logging
 
 from app.schemas.predict import PredictResponse
 from app.models import predictor
@@ -8,6 +9,7 @@ from app.core.config import Settings
 from app.dependencies import get_model, get_app_settings, get_device
 
 router = APIRouter()
+logger = logging.getLogger("app.routes.predict")
 
 @router.post("/predict", response_model=PredictResponse)
 async def predict_endpoint(
@@ -17,20 +19,15 @@ async def predict_endpoint(
     settings: Settings = Depends(get_app_settings),
     device: torch.device = Depends(get_device)
 ):
-    """
-    Endpoint nhận ảnh và metadata (dưới dạng chuỗi JSON) để dự đoán.
-    """
+
     try:
-        # Đọc ảnh
         image_bytes = await image.read()
         
-        # Parse metadata
         try:
             metadata_dict = json.loads(metadata)
         except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Metadata không phải là JSON hợp lệ.")
+            raise HTTPException(status_code=400, detail="Metadata is not valid JSON.")
             
-        # Parse class mapping
         class_mapping = json.loads(settings.CLASS_MAPPING_JSON)
 
         # Chạy dự đoán và XAI
@@ -45,5 +42,5 @@ async def predict_endpoint(
         return response_data
 
     except Exception as e:
-        print(f"Lỗi tại endpoint /predict: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in predict_endpoint: %s", e)
+        raise HTTPException(status_code=500, detail="Error in endpoint /predict")

@@ -9,10 +9,8 @@ import json
 from app.schemas.predict import PredictionScore, XAIResponse, PredictResponse
 from app.models.xai import run_grad_cam, unnormalize_tensor
 
-# Kích thước ảnh đầu vào cho model
 IMAGE_SIZE = 224
 
-# Phép biến đổi cho ảnh đầu vào (lấy từ val_test_transforms trong notebook)
 preprocess_transforms = transforms.Compose([
     transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
     transforms.ToTensor(),
@@ -20,58 +18,44 @@ preprocess_transforms = transforms.Compose([
 ])
 
 def preprocess_image(image_bytes: bytes, device: torch.device) -> torch.Tensor:
-    """Tiền xử lý ảnh thô (bytes) thành tensor chuẩn bị cho model."""
     image = Image.open(BytesIO(image_bytes)).convert('RGB')
-    tensor = preprocess_transforms(image).unsqueeze(0) # Thêm batch dimension
+    tensor = preprocess_transforms(image).unsqueeze(0)
     return tensor.to(device)
 
 def run_prediction_and_xai(model, image_bytes: bytes, metadata: dict, class_mapping: dict, device: torch.device) -> PredictResponse:
-    """
-    Hàm lõi: Nhận ảnh, chạy dự đoán và Grad-CAM.
-    """
-    
-    # 1. Tiền xử lý ảnh
+
     input_tensor = preprocess_image(image_bytes, device)
 
-    # 2. Chạy dự đoán
     with torch.no_grad():
         outputs = model(input_tensor)
         probabilities = F.softmax(outputs, dim=1)[0]
 
-    # 3. Lấy tất cả điểm số
     all_scores = []
     for i, prob in enumerate(probabilities):
         class_name = class_mapping.get(str(i), f"Class_{i}")
         all_scores.append(PredictionScore(class_name=class_name, score=prob.item()))
-    
-    # Sắp xếp điểm số từ cao đến thấp
+
     all_scores.sort(key=lambda x: x.score, reverse=True)
 
-    # 4. Lấy dự đoán cao nhất
     top_pred = all_scores[0]
     pred_label_idx = probabilities.argmax().item()
 
-    # 5. Chạy Grad-CAM
-    # Grad-CAM cần ảnh gốc (0-1) để hiển thị, không phải ảnh đã chuẩn hóa
     unnormalized_input_tensor = unnormalize_tensor(input_tensor)
     
     heatmap_base64 = run_grad_cam(
         model=model,
-        normalized_tensor=input_tensor,        # Gửi tensor đã chuẩn hóa
-        unnormalized_tensor=unnormalized_input_tensor, # Gửi tensor chưa chuẩn hóa
+        normalized_tensor=input_tensor,       
+        unnormalized_tensor=unnormalized_input_tensor, 
         target_label_idx=pred_label_idx,
         device=device
     )
-
     # Ensure heatmap_base64 is a string (pydantic requires str).
-    # If the XAI generation failed it may return None or a non-string value;
-    # coerce to an empty string in that case so validation won't fail.
     if not isinstance(heatmap_base64, str):
         heatmap_base64 = ""
 
     # 6. Tạo response
     response = PredictResponse(
-        temp_id=metadata.get("temp_id", "unknown"), # Trả lại temp_id
+        temp_id=metadata.get("temp_id", "unknown"), 
         input_metadata=metadata,
         prediction=top_pred,
         all_scores=all_scores,

@@ -1,3 +1,4 @@
+import logging
 import torch
 import json
 from fastapi import FastAPI , HTTPException, Request
@@ -21,13 +22,18 @@ def load_model_on_startup():
     Hàm này được gọi khi FastAPI khởi động.
     Nó tải settings, download model từ Hugging Face, và load model vào bộ nhớ.
     """
-    print("--- Đang tải model khi khởi động ---")
+    # Configure basic logging for the ML service if not already configured by the
+    # server process (uvicorn). Using INFO as default level.
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("model_service.main")
+
+    logger.info("--- Đang tải model khi khởi động ---")
     settings = get_settings()
     app.state.settings = settings
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     app.state.device = device
-    print(f"Sử dụng thiết bị: {device}")
+    logger.info(f"Sử dụng thiết bị: {device}")
 
     try:
         # Tải file model từ Hugging Face Hub
@@ -35,7 +41,7 @@ def load_model_on_startup():
             repo_id=settings.HUGGING_FACE_REPO_ID,
             filename=settings.MODEL_FILE_NAME
         )
-        print(f"Model đã được tải về tại: {model_path}")
+        logger.info(f"Model đã được tải về tại: {model_path}")
 
         # 1. Khởi tạo kiến trúc model
         model = create_resnet50_model(num_classes=settings.NUM_CLASSES)
@@ -50,7 +56,7 @@ def load_model_on_startup():
                 name = k[7:]  # Bỏ 7 ký tự 'module.'
                 new_state_dict[name] = v
             state_dict = new_state_dict
-            print("Đã xử lý state_dict từ DataParallel.")
+            logger.info("Đã xử lý state_dict từ DataParallel.")
 
         # 4. Load state_dict đã xử lý vào model
         model.load_state_dict(state_dict)
@@ -61,17 +67,15 @@ def load_model_on_startup():
 
         # 6. Lưu model vào state của app
         app.state.model = model
-        print("--- Model đã được tải và khởi tạo thành công ---")
+        logger.info("--- Model đã được tải và khởi tạo thành công ---")
 
     except Exception as e:
-        print(f"LỖI: Không thể tải model. {e}")
-        # Trong môi trường production, bạn có thể muốn app crash nếu không tải được model
-        # raise e
+        logger.exception("LỖI: Không thể tải model.")
 
-# Bao gồm router dự đoán
+
+
 app.include_router(predict.router, prefix="/api/v1", tags=["Prediction"])
 
 @app.get("/", tags=["Health Check"])
 def read_root():
-    """Endpoint kiểm tra sức khoẻ."""
     return {"status": "ML service is running"}

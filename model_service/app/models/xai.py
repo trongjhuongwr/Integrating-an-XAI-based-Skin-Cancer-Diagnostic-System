@@ -10,7 +10,6 @@ from io import BytesIO
 logger = logging.getLogger(__name__)
 
 def unnormalize_tensor(tensor, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
-    """Chuyển tensor đã chuẩn hóa về dạng ảnh [0, 1] để hiển thị."""
     mean = torch.tensor(mean).reshape(1, 3, 1, 1).to(tensor.device)
     std = torch.tensor(std).reshape(1, 3, 1, 1).to(tensor.device)
     return (tensor * std) + mean
@@ -60,10 +59,8 @@ def run_grad_cam(model, normalized_tensor, unnormalized_tensor, target_label_idx
             if fig is None:
                 raise RuntimeError("captum.visualize_image_attr returned None fig")
         except Exception:
-            # Fallback: create a simple overlay using matplotlib
             fig = plt.figure(figsize=(4, 4), dpi=100)
             plt.imshow(img_np)
-            # normalize attr for display
             a = attr_gray
             try:
                 a = (a - a.min()) / (a.max() - a.min() + 1e-8)
@@ -83,6 +80,5 @@ def run_grad_cam(model, normalized_tensor, unnormalized_tensor, target_label_idx
         return f"data:image/png;base64,{img_base64}"
 
     except Exception as e:
-        # Log exception and return empty string so pydantic validation (str) won't fail
         logger.exception("Error running Grad-CAM: %s", e)
         return ""
