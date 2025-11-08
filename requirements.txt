@@ -1,0 +1,15 @@
+streamlit
+torch
+torchvision
+torchaudio
+grad-cam
+lime
+scikit-image
+opencv-python
+matplotlib
+numpy
+pandas
+Pillow
+python-dotenv
+supabase
+huggingface-hub
